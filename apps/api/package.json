@@ -1,0 +1,28 @@
+{
+  "name": "@squawk/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=../../.env src/server.ts",
+    "start": "node --env-file-if-exists=../../.env src/server.ts",
+    "db:migrate": "node --env-file-if-exists=../../.env src/migrate.ts",
+    "db:seed": "node --env-file-if-exists=../../.env src/seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@aws-sdk/client-rds": "3.1152.0",
+    "@types/pg": "8.23.1",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "11.2.1",
+    "@squawk/shared": "workspace:*",
+    "fastify": "5.12.7",
+    "fastify-type-provider-zod": "7.0.0",
+    "node-pg-migrate": "9.0.0",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  }
+}
