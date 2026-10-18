@@ -4,10 +4,13 @@ import rateLimit from '@fastify/rate-limit';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type pg from 'pg';
 import { aircraftRoutes } from './routes/aircraft.ts';
+import { defectRoutes } from './routes/defects.ts';
 import { healthRoutes } from './routes/health.ts';
+import type { Storage } from './storage.ts';
 
 export interface AppOptions {
   pool: pg.Pool;
+  storage: Storage;
   logLevel?: string;
   rateLimitMax?: number;
 }
@@ -16,6 +19,7 @@ const REQUEST_ID = /^[A-Za-z0-9-]{1,64}$/;
 
 export async function buildApp({
   pool,
+  storage,
   logLevel = 'info',
   rateLimitMax = 100,
 }: AppOptions): Promise<FastifyInstance> {
@@ -48,5 +52,6 @@ export async function buildApp({
   await app.register(rateLimit, { max: rateLimitMax, timeWindow: '1 minute' });
   await app.register(healthRoutes, { pool });
   await app.register(aircraftRoutes, { pool });
+  await app.register(defectRoutes, { pool, storage });
   return app;
 }

@@ -2,13 +2,18 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.ts';
 import { createPool } from '../src/db.ts';
+import { createS3Client, createStorage } from '../src/storage.ts';
 
 // Port 1 refuses connections, so every query fails fast.
 const pool = createPool('postgres://squawk:squawk@127.0.0.1:1/squawk');
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  app = await buildApp({ pool, logLevel: 'silent' });
+  app = await buildApp({
+    pool,
+    storage: createStorage(createS3Client(), 'unused'),
+    logLevel: 'silent',
+  });
 });
 
 afterAll(async () => {

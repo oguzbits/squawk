@@ -1,11 +1,13 @@
 import { buildApp } from './app.ts';
 import { loadConfig } from './config.ts';
 import { createPool } from './db.ts';
+import { createS3Client, createStorage } from './storage.ts';
 
 const config = loadConfig();
 const pool = createPool(config.DATABASE_URL);
 const app = await buildApp({
   pool,
+  storage: createStorage(createS3Client(), config.S3_BUCKET),
   logLevel: config.LOG_LEVEL,
   rateLimitMax: config.RATE_LIMIT_MAX,
 });

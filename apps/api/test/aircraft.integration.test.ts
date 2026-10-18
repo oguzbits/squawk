@@ -4,7 +4,8 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
-import { createPool, migrate } from '../src/db.ts';
+import { createPool } from '../src/db.ts';
+import { createS3Client, createStorage } from '../src/storage.ts';
 
 const { DATABASE_URL } = loadConfig();
 const pool = createPool(DATABASE_URL);
@@ -12,8 +13,11 @@ const registration = `T-${Date.now().toString(36).toUpperCase()}`;
 let app: FastifyInstance;
 
 beforeAll(async () => {
-  await migrate(DATABASE_URL);
-  app = await buildApp({ pool, logLevel: 'silent' });
+  app = await buildApp({
+    pool,
+    storage: createStorage(createS3Client(), loadConfig().S3_BUCKET),
+    logLevel: 'silent',
+  });
 });
 
 afterAll(async () => {

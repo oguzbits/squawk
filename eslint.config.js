@@ -14,6 +14,10 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
+    files: ['**/*.test.{ts,tsx}'],
+    rules: { '@typescript-eslint/no-non-null-assertion': 'off' },
+  },
+  {
     files: ['apps/api/**/*.ts', 'packages/**/*.ts', 'scripts/**/*.ts', '*.js'],
     languageOptions: { globals: globals.node },
   },
