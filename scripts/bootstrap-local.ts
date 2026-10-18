@@ -7,6 +7,7 @@ import {
   RDSClient,
   waitUntilDBInstanceAvailable,
 } from '@aws-sdk/client-rds';
+import { CreateBucketCommand, PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3';
 
 const DB_INSTANCE_ID = 'squawk';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'localhost.floci.io']);
@@ -27,6 +28,34 @@ if (String(port) !== db.port) {
   throw new Error(`RDS instance listens on port ${port}, but DATABASE_URL uses port ${db.port}`);
 }
 console.log(`RDS instance "${DB_INSTANCE_ID}" available on port ${port}`);
+
+await ensureBucket();
+
+async function ensureBucket(): Promise<void> {
+  const bucket = process.env.S3_BUCKET ?? 'squawk-attachments';
+  const s3 = new S3Client({ forcePathStyle: true });
+  try {
+    await s3.send(new CreateBucketCommand({ Bucket: bucket }));
+  } catch (err) {
+    if (!(err instanceof Error) || err.name !== 'BucketAlreadyOwnedByYou') throw err;
+  }
+  await s3.send(
+    new PutBucketCorsCommand({
+      Bucket: bucket,
+      CORSConfiguration: {
+        CORSRules: [
+          {
+            AllowedOrigins: [process.env.WEB_ORIGIN ?? 'http://localhost:5173'],
+            AllowedMethods: ['POST'],
+            AllowedHeaders: ['*'],
+            MaxAgeSeconds: 300,
+          },
+        ],
+      },
+    }),
+  );
+  console.log(`S3 bucket "${bucket}" ready`);
+}
 
 async function waitForFloci(baseUrl: string): Promise<void> {
   const deadline = Date.now() + 30_000;
