@@ -50,7 +50,7 @@ Run lint, typecheck and test before every commit. Never skip hooks with `--no-ve
 
 ## Workflow
 
-- One feature branch per milestone, small Conventional Commits, a pull request with problem, solution and test evidence.
+- Work directly on `main` in small Conventional Commits, each one reversible with `git revert`. No pull requests and no feature branches.
 - Every real architecture decision gets an ADR in `docs/adr/` with context, options, decision, consequences and the conditions under which it would be decided differently.
 - Documentation is English, factual and uses relative links. Update docs in the same change as the code. The README roadmap lists what is not built as "Planned"; nothing half-finished on `main`.
 - Never commit secrets. Only `.env.example` is tracked.
