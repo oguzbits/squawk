@@ -1,0 +1,28 @@
+{
+  "name": "squawk",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "env:up": "test -f .env || cp .env.example .env; docker compose up -d && node --env-file=.env scripts/bootstrap-local.ts && pnpm --filter @squawk/api db:migrate && pnpm --filter @squawk/api db:seed",
+    "env:down": "docker compose down",
+    "dev": "pnpm --parallel --filter @squawk/api --filter @squawk/web dev",
+    "test": "pnpm -r test",
+    "typecheck": "tsc -p scripts && pnpm -r typecheck",
+    "lint": "eslint . && prettier --check ."
+  },
+  "devDependencies": {
+    "@aws-sdk/client-rds": "3.1152.0",
+    "@eslint/js": "10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2"
+  }
+}
