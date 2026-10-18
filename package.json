@@ -8,7 +8,7 @@
   },
   "scripts": {
     "env:up": "test -f .env || cp .env.example .env; docker compose up -d && node --env-file=.env scripts/bootstrap-local.ts && pnpm --filter @squawk/api db:migrate && pnpm --filter @squawk/api db:seed",
-    "env:down": "docker compose down",
+    "env:down": "docker ps -aq --filter name=floci-aws | xargs -r docker rm -f; docker compose down",
     "dev": "pnpm --parallel --filter @squawk/api --filter @squawk/web dev",
     "test": "pnpm -r test",
     "typecheck": "tsc -p scripts && pnpm -r typecheck",
