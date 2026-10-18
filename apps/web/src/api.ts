@@ -1,4 +1,13 @@
-import { aircraftListSchema, type Aircraft } from '@squawk/shared';
+import {
+  aircraftListSchema,
+  createDefectResponseSchema,
+  defectListSchema,
+  defectSchema,
+  type Aircraft,
+  type CreateDefectInput,
+  type Defect,
+  type UploadTarget,
+} from '@squawk/shared';
 import type { z } from 'zod';
 
 export class ApiError extends Error {
@@ -11,12 +20,82 @@ export class ApiError extends Error {
   }
 }
 
-async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const res = await fetch(`/api${path}`, { headers: { accept: 'application/json' } });
-  if (!res.ok) throw new ApiError(res.status, `GET ${path} failed with status ${res.status}`);
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body: unknown = await res.json();
+    if (typeof body === 'object' && body !== null && 'message' in body) {
+      if (typeof body.message === 'string') return body.message;
+    }
+  } catch {
+    // not JSON
+  }
+  return fallback;
+}
+
+async function request<T>(
+  method: 'GET' | 'POST',
+  path: string,
+  schema: z.ZodType<T>,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method,
+    headers: {
+      accept: 'application/json',
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new ApiError(
+      res.status,
+      await errorMessage(res, `${method} ${path} failed with status ${res.status}`),
+    );
+  }
   const parsed = schema.safeParse(await res.json());
-  if (!parsed.success) throw new Error(`GET ${path} returned an unexpected response`);
+  if (!parsed.success) throw new Error(`${method} ${path} returned an unexpected response`);
   return parsed.data;
 }
 
-export const fetchAircraft = (): Promise<Aircraft[]> => getJson('/aircraft', aircraftListSchema);
+export const fetchAircraft = (): Promise<Aircraft[]> =>
+  request('GET', '/aircraft', aircraftListSchema);
+
+export const fetchDefects = (): Promise<Defect[]> => request('GET', '/defects', defectListSchema);
+
+async function uploadAttachment(target: UploadTarget, file: File): Promise<void> {
+  // Goes straight to S3; the file never passes through the API.
+  const form = new FormData();
+  for (const [name, value] of Object.entries(target.fields)) form.append(name, value);
+  form.append('file', file);
+  const res = await fetch(target.url, { method: 'POST', body: form });
+  if (!res.ok) throw new Error(`Upload to storage failed with status ${res.status}`);
+}
+
+export interface ReportResult {
+  defect: Defect;
+  /** Set when the defect was saved but the attachment could not be stored. */
+  attachmentError: string | null;
+}
+
+export async function reportDefect(
+  input: CreateDefectInput,
+  file: File | undefined,
+): Promise<ReportResult> {
+  const { defect, upload } = await request('POST', '/defects', createDefectResponseSchema, input);
+  if (!upload || !file) return { defect, attachmentError: null };
+
+  try {
+    await uploadAttachment(upload, file);
+    const confirmed = await request(
+      'POST',
+      `/defects/${defect.id}/attachment/complete`,
+      defectSchema,
+    );
+    return { defect: confirmed, attachmentError: null };
+  } catch (err) {
+    return {
+      defect,
+      attachmentError: err instanceof Error ? err.message : 'Attachment upload failed',
+    };
+  }
+}

@@ -32,3 +32,20 @@ td {
 [role='alert'] {
   color: #a40000;
 }
+
+form {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 480px;
+  margin: 2rem 0;
+}
+
+label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field-error {
+  margin: 0;
+  color: #a40000;
+}
