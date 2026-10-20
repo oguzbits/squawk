@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "env:up": "test -f .env || cp .env.example .env; docker compose up -d && node --env-file=.env scripts/bootstrap-local.ts && pnpm --filter @squawk/api db:migrate && pnpm --filter @squawk/api db:seed",
+    "env:up": "test -f .env || cp .env.example .env; pnpm --filter @squawk/importer build && docker compose up -d && node --env-file=.env scripts/bootstrap-local.ts && pnpm --filter @squawk/api db:migrate && pnpm --filter @squawk/api db:seed",
     "env:down": "docker ps -aq --filter name=floci-aws | xargs -r docker rm -f; docker compose down",
     "dev": "pnpm --parallel --filter @squawk/api --filter @squawk/web dev",
     "test": "pnpm -r test",
@@ -15,8 +15,10 @@
     "lint": "eslint . && prettier --check ."
   },
   "devDependencies": {
+    "@aws-sdk/client-lambda": "3.1152.0",
     "@aws-sdk/client-rds": "3.1152.0",
     "@aws-sdk/client-s3": "3.1152.0",
+    "@aws-sdk/client-sqs": "3.1152.0",
     "@eslint/js": "10.0.1",
     "@types/node": "^24.19.2",
     "eslint": "10.13.0",

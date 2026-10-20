@@ -7,9 +7,28 @@ import {
   RDSClient,
   waitUntilDBInstanceAvailable,
 } from '@aws-sdk/client-rds';
-import { CreateBucketCommand, PutBucketCorsCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CreateEventSourceMappingCommand,
+  CreateFunctionCommand,
+  GetFunctionCommand,
+  LambdaClient,
+  ListEventSourceMappingsCommand,
+  ResourceNotFoundException,
+  UpdateFunctionCodeCommand,
+  UpdateFunctionConfigurationCommand,
+  waitUntilFunctionUpdatedV2,
+} from '@aws-sdk/client-lambda';
+import {
+  CreateBucketCommand,
+  PutBucketCorsCommand,
+  PutBucketNotificationConfigurationCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { CreateQueueCommand, GetQueueAttributesCommand, SQSClient } from '@aws-sdk/client-sqs';
+import { readFileSync } from 'node:fs';
 
 const DB_INSTANCE_ID = 'squawk';
+const IMPORT_FUNCTION = 'squawk-flight-import';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'localhost.floci.io']);
 
 const endpoint = process.env.AWS_ENDPOINT_URL;
@@ -30,6 +49,7 @@ if (String(port) !== db.port) {
 console.log(`RDS instance "${DB_INSTANCE_ID}" available on port ${port}`);
 
 await ensureBucket();
+await ensureImportPipeline();
 
 async function ensureBucket(): Promise<void> {
   const bucket = process.env.S3_BUCKET ?? 'squawk-attachments';
@@ -101,4 +121,84 @@ async function createInstance(): Promise<number | undefined> {
     { DBInstanceIdentifier: DB_INSTANCE_ID },
   );
   return findInstancePort();
+}
+
+// S3 (imports/ prefix) -> SQS -> Lambda, with a dead-letter queue for files that keep failing.
+async function ensureImportPipeline(): Promise<void> {
+  const bucket = process.env.S3_BUCKET ?? 'squawk-attachments';
+  const sqs = new SQSClient({});
+  const lambda = new LambdaClient({});
+  const s3 = new S3Client({ forcePathStyle: true });
+
+  const queueArn = async (name: string, attributes: Record<string, string> = {}) => {
+    const { QueueUrl } = await sqs.send(
+      new CreateQueueCommand({ QueueName: name, Attributes: attributes }),
+    );
+    const { Attributes } = await sqs.send(
+      new GetQueueAttributesCommand({ QueueUrl, AttributeNames: ['QueueArn'] }),
+    );
+    return Attributes?.QueueArn ?? '';
+  };
+  const dlqArn = await queueArn('flight-import-dlq');
+  const arn = await queueArn('flight-import-files', {
+    // Longer than the function timeout, otherwise a running invocation would be delivered again.
+    VisibilityTimeout: '60',
+    RedrivePolicy: JSON.stringify({ deadLetterTargetArn: dlqArn, maxReceiveCount: 3 }),
+  });
+
+  await s3.send(
+    new PutBucketNotificationConfigurationCommand({
+      Bucket: bucket,
+      NotificationConfiguration: {
+        QueueConfigurations: [
+          {
+            QueueArn: arn,
+            Events: ['s3:ObjectCreated:*'],
+            Filter: { Key: { FilterRules: [{ Name: 'prefix', Value: 'imports/' }] } },
+          },
+        ],
+      },
+    }),
+  );
+
+  // The function reaches the database through the RDS proxy port of the Floci container.
+  const functionDatabaseUrl = new URL(db);
+  functionDatabaseUrl.hostname = 'floci';
+  const config = {
+    FunctionName: IMPORT_FUNCTION,
+    Runtime: 'nodejs22.x' as const,
+    Handler: 'index.handler',
+    Timeout: 30,
+    Role: 'arn:aws:iam::000000000000:role/squawk-importer',
+    Environment: { Variables: { DATABASE_URL: functionDatabaseUrl.toString() } },
+  };
+  const zip = readFileSync(new URL('../apps/importer/dist/importer.zip', import.meta.url));
+  try {
+    await lambda.send(new GetFunctionCommand({ FunctionName: IMPORT_FUNCTION }));
+    await lambda.send(
+      new UpdateFunctionCodeCommand({ FunctionName: IMPORT_FUNCTION, ZipFile: zip }),
+    );
+    await waitUntilFunctionUpdatedV2(
+      { client: lambda, maxWaitTime: 60 },
+      { FunctionName: IMPORT_FUNCTION },
+    );
+    await lambda.send(new UpdateFunctionConfigurationCommand(config));
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) throw err;
+    await lambda.send(new CreateFunctionCommand({ ...config, Code: { ZipFile: zip } }));
+  }
+
+  const { EventSourceMappings } = await lambda.send(
+    new ListEventSourceMappingsCommand({ FunctionName: IMPORT_FUNCTION }),
+  );
+  if (!EventSourceMappings?.some((m) => m.EventSourceArn === arn)) {
+    await lambda.send(
+      new CreateEventSourceMappingCommand({
+        FunctionName: IMPORT_FUNCTION,
+        EventSourceArn: arn,
+        BatchSize: 1,
+      }),
+    );
+  }
+  console.log(`Import pipeline ready (function "${IMPORT_FUNCTION}")`);
 }

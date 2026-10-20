@@ -5,7 +5,7 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -p .",
-    "build": "esbuild src/handler.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/index.mjs && cd dist && rm -f importer.zip && zip -q importer.zip index.mjs"
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node22 --format=esm --banner:js=\"import{createRequire}from'node:module';const require=createRequire(import.meta.url);\" --outfile=dist/index.mjs && cd dist && rm -f importer.zip && zip -q importer.zip index.mjs"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
