@@ -12,15 +12,22 @@ flowchart LR
   api -->|SQL| rds[(RDS PostgreSQL 16)]
   api -->|presigned POST, HeadObject| s3[(S3 bucket)]
   browser -->|upload via presigned POST| s3
+  s3 -->|ObjectCreated, prefix imports/| sqs[SQS queue<br/>+ dead-letter queue]
+  sqs --> lambda[Lambda<br/>flight import]
+  lambda -->|read CSV| s3
+  lambda -->|SQL| rds
   subgraph floci[Floci - local AWS on :4566]
     rds
     s3
+    sqs
+    lambda
   end
 ```
 
 - The web app (`apps/web`) fetches data through a typed API layer that validates every response against the shared Zod schemas (`packages/shared`).
 - The API (`apps/api`) serves JSON, validates input and output with the same schemas, and writes structured JSON logs with a correlation ID (`x-request-id`, taken from the request if valid, otherwise generated, and returned in the response).
 - Defect attachments (JPEG, PNG, PDF, up to 10 MB) never pass through the API. The API returns a presigned POST whose policy fixes key, content type and exact size; the browser uploads to S3 directly and then confirms the upload, which the API verifies against the stored object.
+- Flight logs are imported as CSV (`registration,flight_date,block_off,block_on,landings,cycles`, one row per flight, up to 5 MB). The upload triggers an S3 notification; SQS delivers it to a Lambda that validates every row and writes the flights. Rows are unique per aircraft and block-off time, so re-uploads and queue retries import nothing twice. Invalid rows are counted and listed by line number and reason, never by content; files that keep failing end up in the dead-letter queue ([ADR 0007](docs/adr/0007-flight-import-via-s3-sqs-lambda.md)).
 - PostgreSQL runs as an RDS instance inside Floci. Floci starts a real Postgres container and exposes it through a proxy port on `127.0.0.1:7001`.
 
 ## Quickstart
@@ -33,7 +40,7 @@ pnpm env:up   # starts Floci, creates the RDS instance, applies migrations and d
 pnpm dev      # API on http://localhost:3000, web on http://localhost:5173
 ```
 
-`pnpm env:up` creates `.env` from `.env.example` if it does not exist, and creates the attachments bucket. All AWS credentials in it are dummy values for Floci.
+`pnpm env:up` creates `.env` from `.env.example` if it does not exist, and creates the attachments bucket, the import queues and the importer Lambda (bundled from `apps/importer`). All AWS credentials in it are dummy values for Floci.
 
 Stop everything with `pnpm env:down`. Floci keeps its state in memory, so the next `pnpm env:up` starts from a clean database.
 
@@ -47,13 +54,15 @@ pnpm typecheck   # tsc in strict mode for every package
 
 ## API
 
-| Method | Path                               | Description                                                                                                   |
-| ------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/health`                          | `200` if the database is reachable, otherwise `503`. Not rate-limited.                                        |
-| `GET`  | `/aircraft`                        | All aircraft, sorted by registration.                                                                         |
-| `GET`  | `/defects`                         | Defects, newest first; optional `?aircraftId=`. Attachments carry a signed download link.                     |
-| `POST` | `/defects`                         | Creates a defect. With an `attachment` declaration (name, type, size) the response includes a presigned POST. |
-| `POST` | `/defects/:id/attachment/complete` | Confirms the upload after verifying size and type of the stored object. Idempotent.                           |
+| Method | Path                               | Description                                                                                                          |
+| ------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health`                          | `200` if the database is reachable, otherwise `503`. Not rate-limited.                                               |
+| `GET`  | `/aircraft`                        | All aircraft, sorted by registration.                                                                                |
+| `GET`  | `/defects`                         | Defects, newest first; optional `?aircraftId=`. Attachments carry a signed download link.                            |
+| `POST` | `/defects`                         | Creates a defect. With an `attachment` declaration (name, type, size) the response includes a presigned POST.        |
+| `POST` | `/defects/:id/attachment/complete` | Confirms the upload after verifying size and type of the stored object. Idempotent.                                  |
+| `POST` | `/imports`                         | Creates a flight import and returns a presigned POST for the CSV file (`text/csv`, exact declared size, up to 5 MB). |
+| `GET`  | `/imports/:id`                     | Status (`pending`, `completed`, `failed`) with imported, skipped and rejected counts and the first rejected lines.   |
 
 All endpoints except `/health` are rate-limited (`RATE_LIMIT_MAX` requests per minute and client, default 100).
 
@@ -62,6 +71,7 @@ All endpoints except `/health` are rate-limited (`RATE_LIMIT_MAX` requests per m
 ```
 apps/api/          Fastify API, SQL migrations, demo data
 apps/web/          React app (Vite)
+apps/importer/     CSV parsing and the import Lambda
 packages/shared/   Zod schemas shared by API and web
 scripts/           Local environment bootstrap
 docs/adr/          Architecture decision records
@@ -76,6 +86,7 @@ docs/floci-notes.md
 - [ADR 0004: SQL-first data access with node-pg-migrate](docs/adr/0004-sql-first-data-access.md)
 - [ADR 0005: Presigned POST instead of upload through the API](docs/adr/0005-presigned-post-instead-of-upload-through-api.md)
 - [ADR 0006: Explicit upload confirmation instead of S3 events](docs/adr/0006-explicit-upload-confirmation.md)
+- [ADR 0007: Flight data import through S3, SQS and Lambda](docs/adr/0007-flight-import-via-s3-sqs-lambda.md)
 - [Floci notes](docs/floci-notes.md): verified emulator behaviour, gaps and workarounds
 
 ## Roadmap
@@ -84,7 +95,7 @@ docs/floci-notes.md
 | ------- | ----------------------------------------------------------------------------------------- |
 | Done    | Foundation: monorepo, local environment, API with health check, migrations, aircraft list |
 | Done    | Defect reports with photo/PDF upload via S3 presigned URLs                                |
-| Planned | Flight data import (CSV) via SQS and Lambda, idempotency, dead-letter queue               |
+| Done    | Flight data import (CSV) via S3, SQS and Lambda, idempotency, dead-letter queue           |
 | Planned | Due-date dashboard with Redis cache, invalidation and load measurement                    |
 | Planned | Audit log in DynamoDB                                                                     |
 | Planned | Terraform for all resources and a GitHub Actions pipeline                                 |
