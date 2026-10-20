@@ -15,7 +15,7 @@ Defect reports can carry a photo or PDF of up to 10 MB. The files must be valida
 
 ## Decision
 
-Option 3. `POST /defects` validates the declared file name, type (JPEG, PNG, PDF) and size (1 byte to 10 MB), then returns a presigned POST. The policy pins the key (`defects/<defect id>/<random id>`), the content type, and the size to exactly the declared value. The URL expires after 5 minutes.
+Option 3. `POST /defects` validates the declared file name, type (JPEG, PNG, PDF) and size (1 byte to 10 MB), then returns a presigned POST. The policy pins the key (`defects/<defect id>`), the content type, and the size to exactly the declared value. The URL expires after 5 minutes.
 
 The declaration is also verified after the upload (see [ADR 0006](0006-explicit-upload-confirmation.md)), because the content type in a policy is whatever the client sends, not a sniffed file type.
 
@@ -29,5 +29,6 @@ The declaration is also verified after the upload (see [ADR 0006](0006-explicit-
 ## When to revisit
 
 - With files above 5 GB or flaky mobile connections, multipart upload with resumable parts would replace the single POST.
+- If a defect could have several attachments or a repeated upload, the key would get a random suffix so that a new upload cannot overwrite a confirmed object.
 - If uploads had to be scanned for malware, an S3-event-driven scan step with a quarantine prefix would be added before attachments become visible.
 - If files were tiny and always below the API's body limit, uploading through the API would be simpler and equally safe.

@@ -98,7 +98,7 @@ export const defectRoutes: FastifyPluginAsyncZod<{ pool: pg.Pool; storage: Stora
     async (req, reply) => {
       const { aircraftId, title, description, attachment } = req.body;
       const id = randomUUID();
-      const key = attachment ? `defects/${id}/${randomUUID()}` : null;
+      const key = attachment ? `defects/${id}` : null;
 
       try {
         await pool.query(
