@@ -83,7 +83,7 @@ docs/floci-notes.md
 | Status  | Milestone                                                                                 |
 | ------- | ----------------------------------------------------------------------------------------- |
 | Done    | Foundation: monorepo, local environment, API with health check, migrations, aircraft list |
-| Planned | Defect reports with photo/PDF upload via S3 presigned URLs                                |
+| Done    | Defect reports with photo/PDF upload via S3 presigned URLs                                |
 | Planned | Flight data import (CSV) via SQS and Lambda, idempotency, dead-letter queue               |
 | Planned | Due-date dashboard with Redis cache, invalidation and load measurement                    |
 | Planned | Audit log in DynamoDB                                                                     |
