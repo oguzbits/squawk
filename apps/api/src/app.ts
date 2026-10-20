@@ -6,6 +6,7 @@ import type pg from 'pg';
 import { aircraftRoutes } from './routes/aircraft.ts';
 import { defectRoutes } from './routes/defects.ts';
 import { healthRoutes } from './routes/health.ts';
+import { importRoutes } from './routes/imports.ts';
 import type { Storage } from './storage.ts';
 
 export interface AppOptions {
@@ -53,5 +54,6 @@ export async function buildApp({
   await app.register(healthRoutes, { pool });
   await app.register(aircraftRoutes, { pool });
   await app.register(defectRoutes, { pool, storage });
+  await app.register(importRoutes, { pool, storage });
   return app;
 }
