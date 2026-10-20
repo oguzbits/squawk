@@ -1,6 +1,7 @@
 import { AircraftList } from './AircraftList.tsx';
 import { DefectForm } from './DefectForm.tsx';
 import { DefectList } from './DefectList.tsx';
+import { ImportForm } from './ImportForm.tsx';
 
 export function App() {
   return (
@@ -9,6 +10,7 @@ export function App() {
       <AircraftList />
       <DefectForm />
       <DefectList />
+      <ImportForm />
     </main>
   );
 }

@@ -1,11 +1,14 @@
 import {
   aircraftListSchema,
   createDefectResponseSchema,
+  createImportResponseSchema,
   defectListSchema,
   defectSchema,
+  flightImportSchema,
   type Aircraft,
   type CreateDefectInput,
   type Defect,
+  type FlightImport,
   type UploadTarget,
 } from '@squawk/shared';
 import type { z } from 'zod';
@@ -62,7 +65,7 @@ export const fetchAircraft = (): Promise<Aircraft[]> =>
 
 export const fetchDefects = (): Promise<Defect[]> => request('GET', '/defects', defectListSchema);
 
-async function uploadAttachment(target: UploadTarget, file: File): Promise<void> {
+async function uploadToStorage(target: UploadTarget, file: File): Promise<void> {
   // Goes straight to S3; the file never passes through the API.
   const form = new FormData();
   for (const [name, value] of Object.entries(target.fields)) form.append(name, value);
@@ -85,7 +88,7 @@ export async function reportDefect(
   if (!upload || !file) return { defect, attachmentError: null };
 
   try {
-    await uploadAttachment(upload, file);
+    await uploadToStorage(upload, file);
     const confirmed = await request(
       'POST',
       `/defects/${defect.id}/attachment/complete`,
@@ -98,4 +101,22 @@ export async function reportDefect(
       attachmentError: err instanceof Error ? err.message : 'Attachment upload failed',
     };
   }
+}
+
+export const fetchImport = (id: string): Promise<FlightImport> =>
+  request('GET', `/imports/${id}`, flightImportSchema);
+
+/** Creates the import and uploads the file; the pipeline processes it asynchronously. */
+export async function startImport(file: File): Promise<FlightImport> {
+  const { import: created, upload } = await request(
+    'POST',
+    '/imports',
+    createImportResponseSchema,
+    {
+      fileName: file.name,
+      size: file.size,
+    },
+  );
+  await uploadToStorage(upload, file);
+  return created;
 }
