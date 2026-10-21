@@ -5,6 +5,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   S3_BUCKET: z.string().min(3).default('squawk-attachments'),
+  REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
 });

@@ -8,6 +8,12 @@ import {
   waitUntilDBInstanceAvailable,
 } from '@aws-sdk/client-rds';
 import {
+  CacheClusterNotFoundFault,
+  CreateCacheClusterCommand,
+  DescribeCacheClustersCommand,
+  ElastiCacheClient,
+} from '@aws-sdk/client-elasticache';
+import {
   CreateEventSourceMappingCommand,
   CreateFunctionCommand,
   GetFunctionCommand,
@@ -28,6 +34,7 @@ import { CreateQueueCommand, GetQueueAttributesCommand, SQSClient } from '@aws-s
 import { readFileSync } from 'node:fs';
 
 const DB_INSTANCE_ID = 'squawk';
+const CACHE_CLUSTER_ID = 'squawk-cache';
 const IMPORT_FUNCTION = 'squawk-flight-import';
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'localhost.floci.io']);
 
@@ -49,6 +56,7 @@ if (String(port) !== db.port) {
 console.log(`RDS instance "${DB_INSTANCE_ID}" available on port ${port}`);
 
 await ensureBucket();
+await ensureCache();
 await ensureImportPipeline();
 
 async function ensureBucket(): Promise<void> {
@@ -201,4 +209,23 @@ async function ensureImportPipeline(): Promise<void> {
     );
   }
   console.log(`Import pipeline ready (function "${IMPORT_FUNCTION}")`);
+}
+
+// Floci proxies the cluster on port 6379 (published by docker-compose.yml); REDIS_URL points there.
+async function ensureCache(): Promise<void> {
+  const elasticache = new ElastiCacheClient({});
+  try {
+    await elasticache.send(new DescribeCacheClustersCommand({ CacheClusterId: CACHE_CLUSTER_ID }));
+  } catch (err) {
+    if (!(err instanceof CacheClusterNotFoundFault)) throw err;
+    await elasticache.send(
+      new CreateCacheClusterCommand({
+        CacheClusterId: CACHE_CLUSTER_ID,
+        Engine: 'redis',
+        CacheNodeType: 'cache.t3.micro',
+        NumCacheNodes: 1,
+      }),
+    );
+  }
+  console.log(`ElastiCache cluster "${CACHE_CLUSTER_ID}" ready`);
 }

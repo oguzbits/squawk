@@ -18,6 +18,7 @@
     "load:measure": "node --env-file=.env scripts/load-dashboard.ts"
   },
   "devDependencies": {
+    "@aws-sdk/client-elasticache": "3.1152.0",
     "@aws-sdk/client-lambda": "3.1152.0",
     "@aws-sdk/client-rds": "3.1152.0",
     "@aws-sdk/client-s3": "3.1152.0",

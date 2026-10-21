@@ -3,6 +3,7 @@ import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type pg from 'pg';
+import { createDueCache, type RedisClient } from './cache.ts';
 import { aircraftRoutes } from './routes/aircraft.ts';
 import { dashboardRoutes } from './routes/dashboard.ts';
 import { defectRoutes } from './routes/defects.ts';
@@ -14,6 +15,9 @@ import type { Storage } from './storage.ts';
 export interface AppOptions {
   pool: pg.Pool;
   storage: Storage;
+  redis?: RedisClient;
+  /** Key prefix for the dashboard cache; tests use their own to stay apart. */
+  cachePrefix?: string;
   logLevel?: string;
   rateLimitMax?: number;
 }
@@ -23,6 +27,8 @@ const REQUEST_ID = /^[A-Za-z0-9-]{1,64}$/;
 export async function buildApp({
   pool,
   storage,
+  redis,
+  cachePrefix,
   logLevel = 'info',
   rateLimitMax = 100,
 }: AppOptions): Promise<FastifyInstance> {
@@ -57,7 +63,11 @@ export async function buildApp({
   await app.register(aircraftRoutes, { pool });
   await app.register(defectRoutes, { pool, storage });
   await app.register(importRoutes, { pool, storage });
-  await app.register(dashboardRoutes, { pool });
-  await app.register(maintenanceRoutes, { pool });
+  const cache = redis ? createDueCache(redis, app.log, cachePrefix) : undefined;
+  await app.register(dashboardRoutes, { pool, cache });
+  await app.register(maintenanceRoutes, {
+    pool,
+    onChange: cache ? () => cache.invalidate() : undefined,
+  });
   return app;
 }

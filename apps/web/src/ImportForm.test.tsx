@@ -67,7 +67,10 @@ describe('ImportForm', () => {
     await user.click(screen.getByRole('button', { name: 'Import' }));
 
     expect(await screen.findByText('Processing…')).toBeInTheDocument();
-    expect(await screen.findByText('3 imported, 1 already known, 1 rejected.')).toBeInTheDocument();
+    // The poll interval is 1 s, longer than the default wait.
+    expect(
+      await screen.findByText('3 imported, 1 already known, 1 rejected.', {}, { timeout: 4000 }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Line 5: invalid landings')).toBeInTheDocument();
     expect(calls(fetchMock).slice(0, 2)).toEqual(['POST /api/imports', `POST ${S3_URL}`]);
   });
