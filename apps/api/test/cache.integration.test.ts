@@ -53,6 +53,8 @@ beforeEach(() => {
   log.warn.mockClear();
 });
 
+const currentVersion = async () => Number((await redis.get(`${prefix}:version`)) ?? 0);
+
 describe('DueCache', () => {
   it('misses first, then serves what was stored, with a TTL', async () => {
     const first = await cache.read();
@@ -63,6 +65,18 @@ describe('DueCache', () => {
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(300);
   });
+
+  it.each(['not json'])(
+    'treats the unparsable cached value %s as a miss, logs it and recovers',
+    async (corrupt) => {
+      await redis.set(`${prefix}:v${await currentVersion()}`, corrupt);
+      const afterCorrupt = await cache.read();
+      expect(afterCorrupt.value).toBeNull();
+      expect(log.warn).toHaveBeenCalled();
+      await afterCorrupt.store(value('3'));
+      expect((await cache.read()).value).toEqual(value('3'));
+    },
+  );
 
   it('misses after an invalidation', async () => {
     const reader = await cache.read();

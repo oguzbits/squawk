@@ -24,7 +24,8 @@ const redis = process.env['REDIS_URL']
 redis?.on('error', (err: Error) =>
   log({ level: 'warn', msg: 'redis client error', error: err.message }),
 );
-redis
+// Awaited before invalidating: on a cold start the first import would otherwise hit a client that is not ready yet.
+const redisReady = redis
   ?.connect()
   .catch((err: Error) =>
     log({ level: 'warn', msg: 'redis connection failed', error: err.message }),
@@ -67,6 +68,7 @@ export async function handler(event: SqsEvent): Promise<void> {
           log,
           ...(redis && {
             invalidateDueCache: async () => {
+              await redisReady;
               await redis.incr(`${DUE_CACHE_PREFIX}:version`);
             },
           }),
