@@ -12,7 +12,10 @@
     "dev": "pnpm --parallel --filter @squawk/api --filter @squawk/web dev",
     "test": "pnpm -r test",
     "typecheck": "tsc -p scripts && pnpm -r typecheck",
-    "lint": "eslint . && prettier --check ."
+    "lint": "eslint . && prettier --check .",
+    "load:seed": "node --env-file=.env scripts/load-seed.ts",
+    "load:clean": "node --env-file=.env scripts/load-seed.ts --clean",
+    "load:measure": "node --env-file=.env scripts/load-dashboard.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-lambda": "3.1152.0",
@@ -20,10 +23,14 @@
     "@aws-sdk/client-s3": "3.1152.0",
     "@aws-sdk/client-sqs": "3.1152.0",
     "@eslint/js": "10.0.1",
+    "@types/autocannon": "^7.12.7",
     "@types/node": "^24.19.2",
+    "@types/pg": "8.23.1",
+    "autocannon": "^8.0.0",
     "eslint": "10.13.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.13.0",
+    "pg": "8.23.1",
     "prettier": "3.9.10",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.2"

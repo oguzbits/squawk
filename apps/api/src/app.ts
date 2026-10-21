@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
 import type pg from 'pg';
 import { aircraftRoutes } from './routes/aircraft.ts';
+import { dashboardRoutes } from './routes/dashboard.ts';
 import { defectRoutes } from './routes/defects.ts';
 import { healthRoutes } from './routes/health.ts';
 import { importRoutes } from './routes/imports.ts';
@@ -55,5 +56,6 @@ export async function buildApp({
   await app.register(aircraftRoutes, { pool });
   await app.register(defectRoutes, { pool, storage });
   await app.register(importRoutes, { pool, storage });
+  await app.register(dashboardRoutes, { pool });
   return app;
 }
