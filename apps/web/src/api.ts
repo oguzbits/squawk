@@ -1,13 +1,16 @@
 import {
   aircraftListSchema,
   createDefectResponseSchema,
+  completeTaskResponseSchema,
   createImportResponseSchema,
   defectListSchema,
   defectSchema,
+  dueDashboardSchema,
   flightImportSchema,
   type Aircraft,
   type CreateDefectInput,
   type Defect,
+  type DueDashboard,
   type FlightImport,
   type UploadTarget,
 } from '@squawk/shared';
@@ -120,3 +123,9 @@ export async function startImport(file: File): Promise<FlightImport> {
   await uploadToStorage(upload, file);
   return created;
 }
+
+export const fetchDueDashboard = (): Promise<DueDashboard> =>
+  request('GET', '/dashboard/due', dueDashboardSchema);
+
+export const completeTask = (taskId: string) =>
+  request('POST', `/maintenance-tasks/${taskId}/complete`, completeTaskResponseSchema);
