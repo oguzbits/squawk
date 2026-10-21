@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { processImport } from './process.ts';
 
 const pool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
@@ -9,6 +9,7 @@ const HEADER = 'registration,flight_date,block_off,block_on,landings,cycles';
 const row = (reg: string, day: string, from = '08:00', to = '09:00') =>
   `${reg},${day},${day}T${from}:00Z,${day}T${to}:00Z,1,1`;
 const importIds: string[] = [];
+const logged: Record<string, unknown>[] = [];
 let aircraftId: string;
 
 beforeAll(async () => {
@@ -26,7 +27,7 @@ afterAll(async () => {
   await pool.end();
 });
 
-async function run(csv: string | Error, id?: string) {
+async function run(csv: string | Error, id?: string, invalidateDueCache?: () => Promise<void>) {
   const importId = id ?? randomUUID();
   if (!id) {
     await pool.query("INSERT INTO flight_import (id, file_name, size) VALUES ($1, 'f.csv', 1)", [
@@ -35,12 +36,51 @@ async function run(csv: string | Error, id?: string) {
     importIds.push(importId);
   }
   const outcome = await processImport(
-    { pool, readObject: async () => (csv instanceof Error ? Promise.reject(csv) : csv) },
+    {
+      pool,
+      readObject: async () => (csv instanceof Error ? Promise.reject(csv) : csv),
+      ...(invalidateDueCache && { invalidateDueCache }),
+      log: logged.push.bind(logged),
+    },
     importId,
   );
   const { rows } = await pool.query('SELECT * FROM flight_import WHERE id = $1', [importId]);
   return { importId, outcome, record: rows[0] };
 }
+
+describe('dashboard cache invalidation', () => {
+  const csv = [HEADER, row(registration, '2026-10-06')].join('\n');
+
+  it('invalidates once after a completed import', async () => {
+    const invalidate = vi.fn(async () => {});
+    const { outcome } = await run(csv, undefined, invalidate);
+    expect(outcome).toBe('completed');
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invalidate when nothing was processed', async () => {
+    const invalidate = vi.fn(async () => {});
+    const first = await run(csv.replace('2026-10-06', '2026-10-07'));
+    await run(csv, first.importId, invalidate); // already processed
+    await run('foo,bar\n1,2', undefined, invalidate); // wrong header
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('keeps the completed import and logs when the invalidation fails', async () => {
+    const { outcome, record } = await run(
+      csv.replace('2026-10-06', '2026-10-08'),
+      undefined,
+      async () => {
+        throw new Error('redis down');
+      },
+    );
+    expect(outcome).toBe('completed');
+    expect(record.status).toBe('completed');
+    expect(logged).toContainEqual(
+      expect.objectContaining({ level: 'warn', msg: 'dashboard cache invalidation failed' }),
+    );
+  });
+});
 
 describe('processImport', () => {
   it('imports valid rows and records rejected lines without row content', async () => {

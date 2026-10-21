@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 export const DUE_SOON_RATIO = 0.1;
 
+/** Key prefix of the dashboard cache; the API reads it, the import Lambda bumps `<prefix>:version`. */
+export const DUE_CACHE_PREFIX = 'due';
+
 export const dueStatusSchema = z.enum(['overdue', 'due-soon', 'ok']);
 export const governingSchema = z.enum(['hours', 'cycles', 'days']);
 

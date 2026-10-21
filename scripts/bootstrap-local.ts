@@ -178,7 +178,9 @@ async function ensureImportPipeline(): Promise<void> {
     Handler: 'index.handler',
     Timeout: 30,
     Role: 'arn:aws:iam::000000000000:role/squawk-importer',
-    Environment: { Variables: { DATABASE_URL: functionDatabaseUrl.toString() } },
+    Environment: {
+      Variables: { DATABASE_URL: functionDatabaseUrl.toString(), REDIS_URL: 'redis://floci:6379' },
+    },
   };
   const zip = readFileSync(new URL('../apps/importer/dist/importer.zip', import.meta.url));
   try {

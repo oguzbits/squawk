@@ -1,5 +1,7 @@
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DUE_CACHE_PREFIX } from '@squawk/shared';
 import pg from 'pg';
+import { createClient } from 'redis';
 import { processImport } from './process.ts';
 
 interface SqsEvent {
@@ -14,6 +16,19 @@ const s3 = new S3Client({ forcePathStyle: Boolean(process.env['AWS_ENDPOINT_URL'
 
 const log = (fields: Record<string, unknown>) =>
   process.stdout.write(`${JSON.stringify(fields)}\n`);
+
+// Without a command queue a Redis outage fails fast instead of hanging the invocation.
+const redis = process.env['REDIS_URL']
+  ? createClient({ url: process.env['REDIS_URL'], disableOfflineQueue: true })
+  : undefined;
+redis?.on('error', (err: Error) =>
+  log({ level: 'warn', msg: 'redis client error', error: err.message }),
+);
+redis
+  ?.connect()
+  .catch((err: Error) =>
+    log({ level: 'warn', msg: 'redis connection failed', error: err.message }),
+  );
 
 async function readObject(bucket: string, key: string): Promise<string> {
   const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
@@ -46,7 +61,16 @@ export async function handler(event: SqsEvent): Promise<void> {
       }
       const importId = match[1];
       const outcome = await processImport(
-        { pool, readObject: (k) => readObject(entry.bucket.name, k) },
+        {
+          pool,
+          readObject: (k) => readObject(entry.bucket.name, k),
+          log,
+          ...(redis && {
+            invalidateDueCache: async () => {
+              await redis.incr(`${DUE_CACHE_PREFIX}:version`);
+            },
+          }),
+        },
         importId,
       );
       log({

@@ -1,4 +1,4 @@
-import { dueDashboardSchema, type DueDashboard } from '@squawk/shared';
+import { DUE_CACHE_PREFIX, dueDashboardSchema, type DueDashboard } from '@squawk/shared';
 /** The three commands the cache uses; the node-redis client satisfies it. */
 export interface RedisClient {
   get(key: string): Promise<string | null>;
@@ -24,7 +24,11 @@ export interface DueCache {
 const TTL_SECONDS = 300;
 
 // Redis problems never fail a request: they are logged and the caller computes from the database.
-export function createDueCache(redis: RedisClient, log: CacheLog, prefix = 'due'): DueCache {
+export function createDueCache(
+  redis: RedisClient,
+  log: CacheLog,
+  prefix = DUE_CACHE_PREFIX,
+): DueCache {
   const versionKey = `${prefix}:version`;
   const dataKey = (version: number) => `${prefix}:v${version}`;
 

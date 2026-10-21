@@ -5,6 +5,9 @@ import { parseFlightCsv, type RejectedRow } from './parse.ts';
 export interface ImportDeps {
   pool: pg.Pool;
   readObject(key: string): Promise<string>;
+  /** Best effort: runs after the commit; a failure is logged and never changes the outcome. */
+  invalidateDueCache?: () => Promise<void>;
+  log?: (fields: Record<string, unknown>) => void;
 }
 
 export type ImportOutcome = 'completed' | 'failed' | 'unknown' | 'already-processed';
@@ -83,11 +86,27 @@ export async function processImport(deps: ImportDeps, importId: string): Promise
       ],
     );
     await client.query('COMMIT');
+    await invalidateDueCache(deps, importId);
     return 'completed';
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
+  }
+}
+
+// The import is committed at this point, so a retry would be skipped as already processed:
+// a failure here is logged and the cache TTL bounds how long the dashboard can be stale.
+async function invalidateDueCache(deps: ImportDeps, importId: string): Promise<void> {
+  try {
+    await deps.invalidateDueCache?.();
+  } catch (err) {
+    deps.log?.({
+      level: 'warn',
+      msg: 'dashboard cache invalidation failed',
+      correlationId: importId,
+      error: err instanceof Error ? err.message : 'unknown error',
+    });
   }
 }

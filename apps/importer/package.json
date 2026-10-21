@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1152.0",
     "@squawk/shared": "workspace:*",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "redis": "6.3.0"
   }
 }

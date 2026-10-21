@@ -11,7 +11,8 @@ import {
   SQSClient,
   SendMessageCommand,
 } from '@aws-sdk/client-sqs';
-import { createImportResponseSchema, flightImportSchema } from '@squawk/shared';
+import { createImportResponseSchema, flightImportSchema, type DueDashboard } from '@squawk/shared';
+import { createClient } from 'redis';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
@@ -25,11 +26,13 @@ const pool = createPool(config.DATABASE_URL);
 const storage = createStorage(createS3Client(), config.S3_BUCKET);
 const registration = `P-${Date.now().toString(36).toUpperCase()}`.slice(0, 7);
 const importIds: string[] = [];
+const redis = createClient({ url: config.REDIS_URL });
 let app: FastifyInstance;
 let aircraftId: string;
 
 beforeAll(async () => {
-  app = await buildApp({ pool, storage, logLevel: 'silent' });
+  await redis.connect();
+  app = await buildApp({ pool, storage, redis, logLevel: 'silent' });
   const { rows } = await pool.query<{ id: string }>(
     "INSERT INTO aircraft (registration, model, msn) VALUES ($1, 'A320-214', '1') RETURNING id",
     [registration],
@@ -38,11 +41,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await pool.query('DELETE FROM maintenance_task WHERE aircraft_id = $1', [aircraftId]);
   await pool.query('DELETE FROM flight WHERE aircraft_id = $1', [aircraftId]);
   await pool.query('DELETE FROM flight_import WHERE id = ANY($1)', [importIds]);
   await pool.query('DELETE FROM aircraft WHERE id = $1', [aircraftId]);
   await Promise.all(importIds.map((id) => storage.deleteObject(`imports/${id}.csv`)));
   await app.close();
+  await redis.quit();
   await pool.end();
 });
 
@@ -85,6 +90,26 @@ describe('flight import pipeline', () => {
     expect(second).toMatchObject({ status: 'completed', imported: 0, skipped: 1 });
     const { rows } = await pool.query('SELECT 1 FROM flight WHERE aircraft_id = $1', [aircraftId]);
     expect(rows).toHaveLength(1);
+  }, 120_000);
+});
+
+describe('dashboard cache after an import', () => {
+  it('shows the usage of newly imported flights although the dashboard was cached before', async () => {
+    const { rows } = await pool.query<{ id: string }>(
+      `INSERT INTO maintenance_task (aircraft_id, name, interval_hours, last_done_at)
+       VALUES ($1, 'pipeline', 3, '2026-01-01T00:00:00Z') RETURNING id`,
+      [aircraftId],
+    );
+    const taskId = rows[0]?.id;
+    const statusOfTask = async () =>
+      (await app.inject({ method: 'GET', url: '/dashboard/due' }))
+        .json<DueDashboard>()
+        .items.find((i) => i.taskId === taskId)?.status;
+    expect(await statusOfTask()).toBe('ok'); // now cached
+
+    const csv = `${HEADER}\n${registration},2026-10-09,2026-10-09T08:00:00Z,2026-10-09T10:00:00Z,1,1\n`;
+    expect((await waitForResult(await uploadCsv(csv))).status).toBe('completed');
+    expect(await statusOfTask()).toBe('due-soon');
   }, 120_000);
 });
 
