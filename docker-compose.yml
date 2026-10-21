@@ -6,6 +6,8 @@ services:
       - '127.0.0.1:4566:4566'
       # RDS proxy ports, one per DB instance
       - '127.0.0.1:7001-7005:7001-7005'
+      # ElastiCache proxy (Redis protocol)
+      - '127.0.0.1:6379:6379'
     volumes:
       # Floci runs RDS (and later Lambda, ElastiCache) as sibling containers
       - /var/run/docker.sock:/var/run/docker.sock
