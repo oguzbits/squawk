@@ -7,6 +7,7 @@ import { aircraftRoutes } from './routes/aircraft.ts';
 import { dashboardRoutes } from './routes/dashboard.ts';
 import { defectRoutes } from './routes/defects.ts';
 import { healthRoutes } from './routes/health.ts';
+import { maintenanceRoutes } from './routes/maintenance.ts';
 import { importRoutes } from './routes/imports.ts';
 import type { Storage } from './storage.ts';
 
@@ -57,5 +58,6 @@ export async function buildApp({
   await app.register(defectRoutes, { pool, storage });
   await app.register(importRoutes, { pool, storage });
   await app.register(dashboardRoutes, { pool });
+  await app.register(maintenanceRoutes, { pool });
   return app;
 }
